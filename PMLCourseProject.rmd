@@ -1,0 +1,156 @@
+---
+title: "PML Course Project"
+author: "K. Marceaux"
+date: "October 3, 2018"
+output: 
+  html_document: 
+    fig.path: P:/COURSERA
+    fig_caption: yes
+    keep_md: yes
+---
+###Introduction and Objective
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.  
+
+The goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants who were asked to perform barbell lifts correctly and incorrectly in 5 different ways.  Ultimately, we are trying to predict the manner in which they did the exercise. This is the "classe" variable in the training set. 
+
+Information on the dataset can be found here:  [Lifting Exercise Dataset](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har)  
+
+
+###Packages Required and Reproducibility 
+Load packages needed and set seed for reproducibility. 
+
+
+```{r loadlibraries, ech = TRUE}
+library(readxl)
+library(data.table)
+library(rpart)
+library(rpart.plot)
+library(caret) 
+library(randomForest)
+
+set.seed(0618)
+```
+
+
+###Data
+Load training and test data sets.  Summaries not shown due to length of the output. 
+
+*Download and read the data.*  
+
+```{r getdata, echo=TRUE}
+## Download training dataset 
+if(!file.exists("./RRdatasets")){dir.create("./RRdatasets")}
+fileUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(fileUrl,destfile="./RRdatasets/training.csv")
+
+
+trainingdata <- read.csv("./RRdatasets//training.csv", header = TRUE,
+                           sep = ",", na.strings=c("NA", "DIV/0", "")) 
+
+##Download testing dataset
+if(!file.exists("./RRdatasets")){dir.create("./RRdatasets")}
+fileUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(fileUrl,destfile="./RRdatasets/testing.csv")
+
+
+testingdata <- read.csv("./RRdatasets//testing.csv", header = TRUE,
+                           sep = ",", na.strings=c("NA", "DIV/0", "")) 
+
+```
+
+```{r summary, echo=TRUE, results="hide"}
+
+head(trainingdata)
+head(testingdata)
+
+summary(trainingdata)
+summary(testingdata)
+
+```
+####Clean and Transform
+Cleaning the dataset of variables with no predictive value was done (X, user_name, plus 5 more).  Variables with missing values were also removed.
+
+
+```{r cleaningdata, echo=TRUE}
+###Removed X, user_name, timestamps, etc. as these data elements are not useful for this project. 
+
+trainingdata <- trainingdata[-c(1:7)]
+testingdata <- testingdata[-c(1:7)]
+
+###Removed data with missing values
+
+trainingdata<- trainingdata[, colSums(is.na(trainingdata))==0]
+testingdata<- testingdata[, colSums(is.na(testingdata))==0]
+
+
+####Datasets observations and variables
+dim(trainingdata)
+dim(testingdata)
+
+
+```
+####Partition the data
+To perform cross validation, the training set must be partitioned.  This was done with a 60/40 split.  (60% for training and 40% for testing)
+ 
+```{r splitdata, echo=TRUE}
+ 
+inTrain = createDataPartition(trainingdata$class, p = 0.6)[[1]]
+PMLtraining = trainingdata[inTrain,]
+PMLtesting = trainingdata[-inTrain,]
+
+dim(PMLtraining)
+dim(PMLtesting)
+
+```
+
+###Model Development 
+A common machine learning method is known as "predicting with trees".  Using decision trees one starts with all the variables then find the first variable that best splits the outcome into two groups.  You then divide the data into two more groups and split and on and on until the groups are too small or they are sufficiently homogeneous.  As the goal is to predict the manner in which a participant did an exercise, the decision tree method seemed a logical place to start with a prediction model.  
+
+Per the lecture in the Practical Machine Learning class, random forests is similar to bagging in the sense that we bootstrap samples, so we take a resample of our observed data, and our training data set. And then we rebuild classification or regression trees on each of those bootstrap samples.  The idea is to grow a large number of trees.  
+
+####Data Exploration
+The "classe" variable, which we are trying to predict, has 5 levels. Below is the frequency of each classe level within the training dataset. 
+
+```{r explore, echo=TRUE}
+plot(PMLtraining$classe, col="black", main="Frequency of Classe variable in Training Dataset", xlab="classe levels", ylab="Frequency")
+
+```
+
+####Prediction Model Using Decision Tree (with results)
+
+```{r DT model, echo=TRUE}
+modelDT <- rpart(classe ~., data=PMLtraining, method="class")
+predDT <- predict(modelDT, PMLtesting, type="class")
+confusionMatrix(PMLtesting$classe, predDT)
+
+###Plot of Decition Tree
+rpart.plot(modelDT, main="Decision Tree", type=2, extra=102)
+
+```
+
+####Prediction Model Using Random Forests (with results)
+```{r RF Model, echo=TRUE}
+modelRF <- train(classe ~ ., method = "rf", data=PMLtraining)
+predRF <- predict(modelRF, PMLtesting)
+confusionMatrix(PMLtesting$classe, predRF)
+
+
+```
+####Results
+Per the models, the Random Forest algorithm performed better than the Decision Tree algorithm.  Per the classification matrices, the accuracy of the Decision Tree Model is 0.7608 while the accuracy of the Random Forest model is 0.9921.  Thus, the random forest model is chosen.  The test data has 20 cases, so with an accuracy of 99% on the cross-validation data, we can expect to have few (or no) of the test samples missclassified.  
+
+####Predict outcomes of Test dataset
+The Random Forest model was applied to the test data.  Here are the results. 
+
+```{r predict, echo=TRUE} 
+
+predictclasse <- predict(modelRF, testingdata)
+predictclasse
+
+```
+
+
+
+ 
+ 
+
